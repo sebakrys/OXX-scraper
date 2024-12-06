@@ -25,7 +25,11 @@ def scrapeItemList(url):
     soup = BeautifulSoup(response.text, 'html.parser')
 
     pagination_items = soup.find_all('li', {'data-testid': 'pagination-list-item'})
-    last_page = max(int(item.get_text()) for item in pagination_items if item.get_text().isdigit())
+    try:
+        last_page = max(int(item.get_text()) for item in pagination_items if item.get_text().isdigit())
+    except:
+        last_page = 1
+
     print(f"Found {last_page} pages to scrape.")
 
     # search through all pages(pagination)
@@ -88,13 +92,13 @@ def scrapeItemDetails(url):
     # get description
     description_tag = soup.find('div', {'data-cy': 'ad_description'})
     if description_tag:
-        product_details['description'] = description_tag.get_text(strip=True)
+        product_details['description'] = description_tag.get_text(strip=True).replace("Opis", "")
         product_details['description_html'] = str(description_tag)
 
     # get image
     image_tag = soup.find('img', {'data-testid': 'swiper-image'})
     if image_tag:
-        product_details['image'] = image_tag['src']
+        product_details['image'] = image_tag['src'].split(";s=")[0]+".jpg"#delete for example ";s=524x699" at end of url
 
     # get categories from breadcrumbs
     breadcrumbs = soup.find('ol', {'data-testid': 'breadcrumbs'})
@@ -113,7 +117,7 @@ def scrapeItemDetails(url):
     return product_details
 
 
-url = ""
+url = "https://adaxserwis.olx.pl/home/"
 scrapeItemList(url)
 
 # display the results
