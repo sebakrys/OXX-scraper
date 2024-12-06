@@ -1,3 +1,5 @@
+import os
+
 import requests
 from bs4 import BeautifulSoup
 import csv
@@ -6,18 +8,24 @@ from urllib.parse import urlparse
 
 # Global list for  product data
 products = []
+def createFileAndAddHeaders(filename):
+    # headers to CSV
+    with open(filename, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        headers = ['Short description', 'Images', 'Title', 'Price', 'Description NoHTML', 'Description', 'Single Category', 'Categories']
+        writer.writerow(headers)
+
 
 def scrapeItemList(url):
     # Generate CSV filename with  timestamp and url part
     url_part = urlparse(url).path.strip("/").replace("/", "_")
     current_date = datetime.now().strftime('%Y.%m.%d_%H_%M_%S')
-    csv_filename = f"itemsCatalogue_{url_part}_{current_date}.csv"
+    part = 0
+    csv_filename = f"itemsCatalogue_{url_part}_{current_date}"
+    print("File Part: " + str(part))
 
-    # headers to CSV
-    with open(csv_filename, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        headers = ['Link', 'Image', 'Title', 'Price', 'Description', 'Description HTML', 'Single Category', 'Categories']
-        writer.writerow(headers)
+    # create file and add headers
+    createFileAndAddHeaders(csv_filename+"_part"+str(part)+".csv")
 
     # get number of total pages
     response = requests.get(url)
@@ -67,10 +75,15 @@ def scrapeItemList(url):
             # save product data to CSV
             if product:
                 print(f"Saving: {product['title']}")
-                with open(csv_filename, mode='a', newline='', encoding='utf-8') as file:
+                if(os.path.getsize(csv_filename + "_part" + str(part) + ".csv")>2000000):
+                    part+=1
+                    createFileAndAddHeaders(csv_filename + "_part" + str(part) + ".csv")
+                    print("new File Part: "+str(part))
+
+                with open(csv_filename + "_part" + str(part) + ".csv", mode='a', newline='', encoding='utf-8') as file:
                     writer = csv.writer(file)
                     writer.writerow([
-                        product.get('link', ''),
+                        product.get('link', '').replace("x", "&#120;"),
                         product.get('image', ''),
                         product.get('title', ''),
                         product.get('price', ''),
@@ -93,7 +106,7 @@ def scrapeItemDetails(url):
     description_tag = soup.find('div', {'data-cy': 'ad_description'})
     if description_tag:
         product_details['description'] = description_tag.get_text(strip=True).replace("Opis", "")
-        product_details['description_html'] = str(description_tag)
+        product_details['description_html'] = str(description_tag).replace("Opis", "")
 
     # get image
     image_tag = soup.find('img', {'data-testid': 'swiper-image'})
