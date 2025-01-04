@@ -175,7 +175,7 @@ def scrapeItemDetails(url):
     return product_details
 
 
-url = ""#base url, for example: https://shop***.olx.pl/home/motoryzacja/
+url = ""#base url, for example: https://shop***.oXX.pl/home/motoryzacja/
 scrapeItemList(url)
 
 # display the results
