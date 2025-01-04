@@ -27,8 +27,8 @@ This project is a Python-based web scraper designed to collect product data from
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/yourrepository.git
-   cd yourrepository
+   git clone https://github.com/sebakrys/OXX-scraper.git
+   cd OXX-scraper
    ```
 
 2. Install the required Python libraries:
