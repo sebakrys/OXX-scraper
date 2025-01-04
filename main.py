@@ -1,4 +1,6 @@
 import os
+import re
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -12,9 +14,34 @@ def createFileAndAddHeaders(filename):
     # headers to CSV
     with open(filename, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        headers = ['Short description', 'Images', 'Title', 'Price', 'Description NoHTML', 'Description', 'Single Category', 'Categories']
+        headers = ['ID', 'Short description', 'Images', 'Title', 'Price', 'Description NoHTML', 'Description', 'Single Category', 'Categories']
         writer.writerow(headers)
 
+
+
+def fetch_with_retries(url, retries=3, delay=2):
+    """
+    Pobiera dane z podanego URL z mechanizmem ponawiania prób w przypadku błędów HTTP.
+    :param url: URL do pobrania
+    :param retries: Maksymalna liczba prób
+    :param delay: Opóźnienie między próbami (w sekundach)
+    :return: Odpowiedź HTTP (response) lub None
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            if(attempt>1):
+                print(f"Fetching URL: {url} (Attempt {attempt}/{retries})")
+            response = requests.get(url)
+            response.raise_for_status()  # Wyjątek, jeśli status >= 400
+            return response
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching {url}: {e}")
+            if attempt < retries:
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print("Maximum retries reached. Skipping.")
+                return None
 
 def scrapeItemList(url):
     # Generate CSV filename with  timestamp and url part
@@ -28,8 +55,11 @@ def scrapeItemList(url):
     createFileAndAddHeaders(csv_filename+"_part"+str(part)+".csv")
 
     # get number of total pages
-    response = requests.get(url)
-    response.raise_for_status()
+    response = fetch_with_retries(url,retries=5, delay=5)
+    if not response:
+        print(f"Skipping URL {url} due to repeated failures.")
+        return
+
     soup = BeautifulSoup(response.text, 'html.parser')
 
     pagination_items = soup.find_all('li', {'data-testid': 'pagination-list-item'})
@@ -43,8 +73,11 @@ def scrapeItemList(url):
     # search through all pages(pagination)
     for page in range(1, last_page + 1):
         print(f"Scraping page {page}...")
-        response = requests.get(url + f"?page={page}")
-        response.raise_for_status()
+        response = fetch_with_retries(url + f"?page={page}", retries=5, delay=5)
+        if not response:
+            print(f"Skipping page {page} due to repeated failures.")
+            continue
+
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # find all product cards on the current page
@@ -60,7 +93,8 @@ def scrapeItemList(url):
 
                 # fetch details for the product
                 detailed_info = scrapeItemDetails(product_url)
-                product.update(detailed_info)
+                if detailed_info:
+                    product.update(detailed_info)
 
 
             title_tag = card.find('p', {'class': 'css-ki4ei7'})
@@ -83,6 +117,7 @@ def scrapeItemList(url):
                 with open(csv_filename + "_part" + str(part) + ".csv", mode='a', newline='', encoding='utf-8') as file:
                     writer = csv.writer(file)
                     writer.writerow([
+                        product.get('ID', ''),
                         product.get('link', '').replace("x", "&#120;"),
                         product.get('image', ''),
                         product.get('title', ''),
@@ -95,9 +130,11 @@ def scrapeItemList(url):
                 products.append(product)
 
 def scrapeItemDetails(url):
-    # fetch product details page
-    response = requests.get(url)
-    response.raise_for_status()
+    response = fetch_with_retries(url, retries=5, delay=5)
+    if not response:
+        print(f"Skipping product details for URL {url} due to repeated failures.")
+        return {}
+
     soup = BeautifulSoup(response.text, 'html.parser')
 
     product_details = {}
@@ -105,13 +142,21 @@ def scrapeItemDetails(url):
     # get description
     description_tag = soup.find('div', {'data-cy': 'ad_description'})
     if description_tag:
-        product_details['description'] = description_tag.get_text(strip=True).replace("Opis", "")
-        product_details['description_html'] = str(description_tag).replace("Opis", "")
+        product_details['description'] = re.sub(r"\+48\*{7}\d{2}", "", description_tag.get_text(strip=True).replace("Opis", "")) # re.sub(r"\+48\*{7}\d{2}", "", text) - deleting for example telephone +48*******75
+        found_tel = re.findall(r"\+48\*{7}\d{2}", str(description_tag).replace("Opis", ""))
+        if(found_tel):
+            print("nr tel:", found_tel)
+        product_details['description_html'] = re.sub(r"\+48\*{7}\d{2}", "", str(description_tag).replace("Opis", ""))
 
     # get image
     image_tag = soup.find('img', {'data-testid': 'swiper-image'})
     if image_tag:
         product_details['image'] = image_tag['src'].split(";s=")[0]+".jpg"#delete for example ";s=524x699" at end of url
+
+    # get ID
+    id_tag = soup.find('span', {'class': 'css-12hdxwj'})
+    if image_tag:
+        product_details['ID'] = id_tag.get_text(strip=True).replace("ID:", "")
 
     # get categories from breadcrumbs
     breadcrumbs = soup.find('ol', {'data-testid': 'breadcrumbs'})
@@ -130,7 +175,7 @@ def scrapeItemDetails(url):
     return product_details
 
 
-url = "https://adaxserwis.olx.pl/home/"
+url = ""#base url, for example: https://shop***.olx.pl/home/motoryzacja/
 scrapeItemList(url)
 
 # display the results
